@@ -59,8 +59,9 @@ const main = async () => {
                 }
 
                 await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), "${targetValue}")]`)), 5000);
-                console.log(`Target value found in window ${index + 1}, refreshing in ${timeout / 1000} seconds...`);
-                await driver.sleep(timeout);
+                const calculatedTimeout = Math.floor(Math.random() * timeout) + 1;
+                console.log(`Target value found in window ${index + 1}, refreshing in ${calculatedTimeout / 1000} seconds...`);
+                await driver.sleep(calculatedTimeout);
                 await driver.navigate().refresh();
                 checkPage(driver, index); // Recursively check the page
             } catch (error) {
