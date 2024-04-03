@@ -20,6 +20,21 @@ let hasFound = false;
 // Function to ask questions in a promise-based way
 const askQuestion = (query) => new Promise(resolve => readline.question(query, resolve));
 
+// Retry mechanism
+const retryOperation = async (operation, maxRetries, retryDelay) => {
+    let retries = 0;
+    while (retries < maxRetries) {
+        try {
+            return await operation();
+        } catch (error) {
+            retries++;
+            console.warn(`Retry attempt ${retries}/${maxRetries}: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+    }
+    throw new Error(`Operation failed after ${maxRetries} retries.`);
+};
+
 // Main async function to handle the logic
 const main = async () => {
     try {
@@ -40,6 +55,7 @@ const main = async () => {
         const windows = [];
 
         // Initialize browser windows
+        console.log(`[Main] Initializing ${numWindows} browser windows...`);
         for (let i = 0; i < numWindows; i++) {
             const driver = await new Builder()
                 .forBrowser('chrome')
@@ -48,39 +64,53 @@ const main = async () => {
             windows.push(driver);
             await driver.get(targetURL);
             await driver.wait(until.elementLocated(By.xpath('html')), 8000);
+            console.log(`[Window ${i + 1}] Initialized and navigated to ${targetURL}`);
         }
 
         // Function to check for the target value and handle refresh or focus
         const checkPage = async (driver, index) => {
             try {
                 if (hasFound) {
-                    console.log('Target value found in another window, closing this window...');
+                    console.log(`[Window ${index + 1}] Target value found in another window, closing this window...`);
                     await driver.quit();
                 }
-
-                await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), "${targetValue}")]`)), 5000);
+                await retryOperation(
+                    async () => {
+                        await driver.wait(until.elementLocated(By.xpath(`//*[contains(text(), "${targetValue}")]`)), 5000);
+                    },
+                    3,
+                    2000
+                );
                 const calculatedTimeout = Math.floor(Math.random() * timeout) + 1;
-                console.log(`Target value found in window ${index + 1}, refreshing in ${calculatedTimeout / 1000} seconds...`);
+                console.log(`[Window ${index + 1}] Target value found, refreshing in ${calculatedTimeout / 1000} seconds...`);
                 await driver.sleep(calculatedTimeout);
                 await driver.navigate().refresh();
-                checkPage(driver, index); // Recursively check the page
+                await checkPage(driver, index);
             } catch (error) {
-                console.log(`Target value not found in window ${index + 1}, bringing it into focus...`);
+                console.log(`[Window ${index + 1}] Target value not found, bringing it into focus...`);
                 await driver.switchTo().newWindow('tab');
-
-                // Set the flag so that the other can stop
                 hasFound = true;
             }
         };
 
         // Start checking each window
+        console.log(`[Main] Starting to check each window for the target value...`);
         windows.forEach((driver, index) => {
             checkPage(driver, index);
         });
 
     } catch (error) {
-        console.error("An error occurred:", error);
+        console.error(`[Main] An error occurred: ${error.message}`);
     }
 };
+
+// Shutdown
+const shutdown = () => {
+    console.log('Exiting...');
+    console.log('Enjoy your tickets! 🌴')
+    process.exit(0);
+}
+
+process.on('SIGINT', shutdown);
 
 main();
